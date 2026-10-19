@@ -16,7 +16,11 @@ Note: ALDI TALK's terms (Leistungsbeschreibung 10.3 g) forbid automation; the us
 - Mini-PC with Proxmox → Home Assistant OS VM, local IP **192.168.50.116** (domain 270700.xyz)
 - Add-ons in use: Advanced SSH & Web Terminal, Samba share, Mosquitto broker (+ MQTT integration)
 - Windows PC maps Samba shares: H: config, I: addons, J: share, K: backup
-- Repo layout: `repository.yaml` + `at_extender/` (the add-on). On HA the add-on is installed at **/addons/at_extender/**. Local add-on slug in HA: `local_at_extender`
+- Repo layout: `repository.yaml` + `at_extender/` (the add-on).
+- Since 2026-10-19 the add-on is installed **from this GitHub repo** (added as add-on repository in HA),
+  slug **`72298cf0_at_extender`**. The old local copy (`local_at_extender`, /addons/at_extender) is uninstalled.
+- Working clone for Claude Code: **/share/at_extender_src** (the Claude Code add-on cannot see /addons).
+  `gh` is logged in as Furkan2000 (token may be lost on Claude Code add-on restart → `gh auth login` again).
 
 ## Files
 - `config.yaml` — add-on manifest (version **1.0.2**, arch amd64/aarch64, `services: mqtt:want`, `map: share:rw`).
@@ -61,17 +65,16 @@ switch.aldi_talk_automatisch_nachbuchen. Broker credentials come from Supervisor
 - 1.0.1: robust login + debug dumps → login OK; then "Datenvolumen nicht gefunden"
   (portal replaced `one-group` with `one-stack`).
 - 1.0.2: new meter parsing, tested locally against the user's real portal HTML (reads 16.5 GB,
-  simulated 812 MB → clicks plus). **Not yet confirmed running on HA by the user.**
+  simulated 812 MB → clicks plus). **Confirmed working on HA** (2026-10-19: login OK, reads 11.90 GB).
 
 ## Open points / next steps
-- Confirm 1.0.2 log shows `Aktuelles Datenvolumen: xx.xx GB` and entities appear in HA.
 - First real top-up (< 1 GB) is untested: check status sensor + /share/at_extender dumps;
   adjust confirmation-dialog handling if needed.
 - Telegram optional (user was looking up chat ID via @userinfobot).
 - Unrelated noise in HA core log: flightradar24 HTTP 429, Bresser template missing `battery_ok`.
 
 ## Workflow tips
-- After editing: bump `version` in config.yaml, then `ha store reload` and update/rebuild the add-on
-  (`ha apps rebuild local_at_extender` or via UI). Logs: `ha apps logs local_at_extender`
-  (older CLI: `ha addons ...`). Set option log_level=debug for per-meter details.
+- Release loop: edit in /share/at_extender_src → bump `version` in config.yaml (required, otherwise
+  HA sees no update) → commit + `git push` → `ha store reload` → `ha apps update 72298cf0_at_extender`.
+  Logs: `ha apps logs 72298cf0_at_extender`. Debug dumps: /share/at_extender/. Set option log_level=debug for per-meter details.
 - Never print the user's phone number/password in logs; only the last 4 digits are used.
