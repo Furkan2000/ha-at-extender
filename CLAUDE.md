@@ -71,6 +71,8 @@ switch.aldi_talk_automatisch_nachbuchen. Broker credentials come from Supervisor
   offset in state.json `tg_offset`), pause state `STATE["paused"]` (persists), HA switch
   `switch.aldi_talk_ueberwachung` (topic `monitor/set`), status `gestoppt`. Add-on bot is a different bot than
   HA's own telegram_bot integration (polling) — don't share tokens or getUpdates will 409.
+- 1.2.0: inline menu replaced by a persistent reply keyboard (`keyboard()`, `is_persistent`), attached to
+  every bot message; buttons arrive as plain text (BTN_START/BTN_STOP/BTN_CHECK/BTN_STATUS). No callback_query anymore.
 
 ## Open points / next steps
 - First real top-up (< 1 GB) is untested: check status sensor + /share/at_extender dumps;

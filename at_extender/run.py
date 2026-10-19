@@ -126,18 +126,29 @@ def tg_api(method, http_timeout=15, **params):
     return data.get("result")
 
 
-def telegram(msg, reply_markup=None):
+BTN_START = "▶️ Überwachung starten"
+BTN_STOP = "⏸ Überwachung stoppen"
+BTN_CHECK = "🔄 Jetzt prüfen"
+BTN_STATUS = "ℹ️ Status"
+
+
+def keyboard():
+    """Feste Tastatur unter dem Eingabefeld; der Start/Stopp-Knopf folgt dem aktuellen Zustand."""
+    toggle = BTN_START if STATE.get("paused") else BTN_STOP
+    return {"keyboard": [[toggle], [BTN_CHECK, BTN_STATUS]],
+            "resize_keyboard": True, "is_persistent": True}
+
+
+def telegram(msg):
+    """Sendet an den eingestellten Chat; jede Nachricht frischt die Tastatur auf."""
     if not OPT.get("telegram_aktiv"):
         return
     if not TG_ON:
         log.warning("Telegram aktiv, aber Bot-Token oder Chat-ID fehlt.")
         return
-    params = {"chat_id": TG_CHAT, "text": msg}
-    if reply_markup:
-        params["reply_markup"] = reply_markup
     for _ in range(3):
         try:
-            tg_api("sendMessage", **params)
+            tg_api("sendMessage", chat_id=TG_CHAT, text=msg, reply_markup=keyboard())
             return
         except Exception as e:
             log.warning(f"Telegram-Fehler: {e}")
@@ -159,14 +170,8 @@ def menu_text():
             f"Nächste Prüfung: {naechste}")
 
 
-def menu_markup():
-    toggle = ({"text": "▶️ Überwachung starten", "callback_data": "start"} if STATE.get("paused")
-              else {"text": "⏸ Überwachung stoppen", "callback_data": "stop"})
-    return {"inline_keyboard": [[toggle], [{"text": "🔄 Jetzt prüfen", "callback_data": "check"}]]}
-
-
 class TelegramBot(threading.Thread):
-    """Long-Polling: Jede Nachricht im Bot-Chat beantwortet der Bot mit dem Menü."""
+    """Long-Polling: wertet die Knöpfe der festen Tastatur aus, sonstiger Text zeigt den Status."""
 
     def __init__(self):
         super().__init__(daemon=True, name="telegram")
@@ -174,11 +179,11 @@ class TelegramBot(threading.Thread):
         self.warned = set()
 
     def run(self):
-        log.info("Telegram-Menü aktiv (schreib dem Bot eine beliebige Nachricht).")
+        log.info("Telegram-Menü aktiv.")
         while True:
             try:
                 updates = tg_api("getUpdates", http_timeout=60, timeout=50, offset=self.offset or "",
-                                 allowed_updates=["message", "callback_query"])
+                                 allowed_updates=["message"])
             except Exception as e:
                 if "409" in str(e):
                     log.warning("Telegram: Bot wird woanders abgefragt (Webhook oder zweites Programm). "
@@ -207,36 +212,21 @@ class TelegramBot(threading.Thread):
         return False
 
     def handle(self, upd):
-        if "message" in upd:
-            if self.allowed(upd["message"]["chat"]["id"]):
-                telegram(menu_text(), reply_markup=menu_markup())
+        msg = upd.get("message")
+        if not msg or not self.allowed(msg["chat"]["id"]):
             return
-
-        cq = upd.get("callback_query")
-        if not cq or not self.allowed(cq.get("message", {}).get("chat", {}).get("id")):
-            return
-        action = cq.get("data")
-        if action == "start":
+        text = (msg.get("text") or "").strip()
+        if text == BTN_START:
             set_paused(False)
-            toast = "Überwachung gestartet - prüfe jetzt."
-        elif action == "stop":
+            telegram("▶️ Überwachung gestartet - prüfe jetzt.")
+        elif text == BTN_STOP:
             set_paused(True)
-            toast = "Überwachung gestoppt."
-        elif action == "check":
+            telegram("⏸ Überwachung gestoppt. „Jetzt prüfen“ geht trotzdem.")
+        elif text == BTN_CHECK:
             request_check()
-            toast = "Prüfung läuft, Ergebnis kommt gleich."
+            telegram("🔄 Prüfung läuft, Ergebnis kommt gleich.")
         else:
-            toast = ""
-        try:
-            tg_api("answerCallbackQuery", callback_query_id=cq["id"], text=toast)
-        except Exception as e:
-            log.debug(f"answerCallbackQuery: {e}")
-        # Menü-Nachricht aktualisieren (Start/Stopp-Knopf wechselt)
-        try:
-            tg_api("editMessageText", chat_id=TG_CHAT, message_id=cq["message"]["message_id"],
-                   text=menu_text(), reply_markup=menu_markup())
-        except Exception as e:
-            log.debug(f"editMessageText: {e}")  # z. B. 'message is not modified'
+            telegram(menu_text())
 
 
 def notify_result(status, meldung):

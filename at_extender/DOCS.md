@@ -53,8 +53,9 @@ Home Assistant.
 Mit `telegram_aktiv` schickt der Bot nach jeder Prüfung eine Nachricht, z. B.
 `…7366: 📶 Noch 11.90 GB übrig. Nächste Prüfung 12:17.`
 
-**Menü:** Schreib dem Bot eine beliebige Nachricht. Er antwortet mit dem aktuellen Stand und den Knöpfen
-**⏸ Überwachung stoppen** / **▶️ Überwachung starten** und **🔄 Jetzt prüfen**.
+**Menü:** Unter dem Eingabefeld im Bot-Chat sind immer die Knöpfe
+**⏸ Überwachung stoppen** / **▶️ Überwachung starten**, **🔄 Jetzt prüfen** und **ℹ️ Status** zu sehen
+(erscheinen mit der ersten Nachricht des Bots). Sonstiger Text zeigt ebenfalls den Status.
 Gestoppt bleibt gestoppt, auch nach einem Neustart des Add-ons. Der Bot reagiert nur auf den Chat aus `telegram_chat_id`.
 
 Der Bot darf nirgends sonst abgefragt werden (kein Webhook, nicht zusätzlich in der HA-Integration „Telegram bot"
