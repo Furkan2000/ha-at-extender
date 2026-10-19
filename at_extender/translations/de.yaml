@@ -26,5 +26,8 @@ configuration:
     name: Telegram Bot-Token
   telegram_chat_id:
     name: Telegram Chat-ID
+  telegram_jede_pruefung:
+    name: Telegram nach jeder Prüfung
+    description: Nach jeder Prüfung das aktuelle Datenvolumen senden. Aus = nur bei Fehler, wenig Volumen oder Nachbuchung.
   log_level:
     name: Log-Level

@@ -3,7 +3,7 @@
 AT-Extender als Home-Assistant-Add-on.
 
 Browser-Logik übernommen aus https://github.com/G-Chalupa/AT-Extender (v1.2.2),
-ergänzt um Add-on-Optionen, MQTT-Discovery und einen Prüf-Button.
+ergänzt um Add-on-Optionen, MQTT-Discovery, einen Prüf-Button und ein Telegram-Menü.
 Kein Auto-Update: Das Upstream-Skript ist derzeit leer.
 """
 import json
@@ -71,38 +71,189 @@ STATE = load_state()
 STATE.setdefault("last_gb", None)
 STATE.setdefault("last_check", None)
 STATE.setdefault("last_topup", None)
+STATE.setdefault("paused", False)
 # Option ist Startwert; danach gilt, was in HA am Schalter eingestellt wurde.
 if STATE.get("auto_option_seen") != OPT.get("automatisch_nachbuchen", True):
     STATE["auto_topup"] = bool(OPT.get("automatisch_nachbuchen", True))
     STATE["auto_option_seen"] = STATE["auto_topup"]
 save_state()
 
-WAKE = threading.Event()  # wird vom HA-Button gesetzt
+WAKE = threading.Event()    # weckt die Hauptschleife (Prüfen, Start, Stopp)
+MANUAL = threading.Event()  # Prüfung auch dann ausführen, wenn die Überwachung pausiert ist
 
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def local_hm(iso):
+    """ISO-Zeitstempel -> 'HH:MM' in lokaler Zeit (oder '-')."""
+    try:
+        return datetime.fromisoformat(iso).astimezone().strftime("%H:%M")
+    except Exception:
+        return "-"
+
+
+def request_check():
+    MANUAL.set()
+    WAKE.set()
+
+
+def set_paused(paused):
+    STATE["paused"] = bool(paused)
+    save_state()
+    log.info(f"Überwachung {'gestoppt' if paused else 'gestartet'}.")
+    WAKE.set()
+
+
 # --------------------------------------------------------------------------- #
 # Telegram (optional)
 # --------------------------------------------------------------------------- #
-def telegram(msg):
+TG_TOKEN = OPT.get("telegram_bot_token") or ""
+TG_CHAT = str(OPT.get("telegram_chat_id") or "").strip()
+TG_ON = bool(OPT.get("telegram_aktiv")) and bool(TG_TOKEN) and bool(TG_CHAT)
+
+
+def tg_api(method, http_timeout=15, **params):
+    """Ruft die Bot-API auf. Gibt 'result' zurück oder None."""
+    for key in ("reply_markup", "allowed_updates"):
+        if key in params and not isinstance(params[key], str):
+            params[key] = json.dumps(params[key])
+    r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/{method}", data=params, timeout=http_timeout)
+    data = r.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"{r.status_code} {data.get('description', '')}")
+    return data.get("result")
+
+
+def telegram(msg, reply_markup=None):
     if not OPT.get("telegram_aktiv"):
         return
-    token, chat = OPT.get("telegram_bot_token"), OPT.get("telegram_chat_id")
-    if not token or not chat:
+    if not TG_ON:
         log.warning("Telegram aktiv, aber Bot-Token oder Chat-ID fehlt.")
         return
+    params = {"chat_id": TG_CHAT, "text": msg}
+    if reply_markup:
+        params["reply_markup"] = reply_markup
     for _ in range(3):
         try:
-            r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                              data={"chat_id": chat, "text": msg}, timeout=15)
-            if r.ok:
-                return
+            tg_api("sendMessage", **params)
+            return
         except Exception as e:
             log.warning(f"Telegram-Fehler: {e}")
         time.sleep(3)
+
+
+def menu_text():
+    gb = STATE.get("last_gb")
+    if STATE.get("paused"):
+        lauf = "⏸ gestoppt"
+        naechste = "-"
+    else:
+        lauf = "▶️ läuft"
+        naechste = local_hm(STATE.get("next_check"))
+    vol = f"{gb:.2f} GB (Stand {local_hm(STATE.get('last_check'))})" if gb is not None else "noch unbekannt"
+    return (f"ALDI TALK …{SUFFIX}\n"
+            f"Überwachung: {lauf}\n"
+            f"Datenvolumen: {vol}\n"
+            f"Nächste Prüfung: {naechste}")
+
+
+def menu_markup():
+    toggle = ({"text": "▶️ Überwachung starten", "callback_data": "start"} if STATE.get("paused")
+              else {"text": "⏸ Überwachung stoppen", "callback_data": "stop"})
+    return {"inline_keyboard": [[toggle], [{"text": "🔄 Jetzt prüfen", "callback_data": "check"}]]}
+
+
+class TelegramBot(threading.Thread):
+    """Long-Polling: Jede Nachricht im Bot-Chat beantwortet der Bot mit dem Menü."""
+
+    def __init__(self):
+        super().__init__(daemon=True, name="telegram")
+        self.offset = STATE.get("tg_offset")
+        self.warned = set()
+
+    def run(self):
+        log.info("Telegram-Menü aktiv (schreib dem Bot eine beliebige Nachricht).")
+        while True:
+            try:
+                updates = tg_api("getUpdates", http_timeout=60, timeout=50, offset=self.offset or "",
+                                 allowed_updates=["message", "callback_query"])
+            except Exception as e:
+                if "409" in str(e):
+                    log.warning("Telegram: Bot wird woanders abgefragt (Webhook oder zweites Programm). "
+                                "Menü funktioniert erst, wenn das aufhört.")
+                    time.sleep(120)
+                else:
+                    log.debug(f"Telegram-Abfrage fehlgeschlagen: {e}")
+                    time.sleep(10)
+                continue
+            for upd in updates or []:
+                self.offset = upd["update_id"] + 1
+                try:
+                    self.handle(upd)
+                except Exception as e:
+                    log.warning(f"Telegram-Update konnte nicht verarbeitet werden: {e}")
+            if updates:
+                STATE["tg_offset"] = self.offset
+                save_state()
+
+    def allowed(self, chat_id):
+        if str(chat_id) == TG_CHAT:
+            return True
+        if chat_id not in self.warned:
+            self.warned.add(chat_id)
+            log.warning(f"Telegram: Nachricht aus fremdem Chat {chat_id} ignoriert.")
+        return False
+
+    def handle(self, upd):
+        if "message" in upd:
+            if self.allowed(upd["message"]["chat"]["id"]):
+                telegram(menu_text(), reply_markup=menu_markup())
+            return
+
+        cq = upd.get("callback_query")
+        if not cq or not self.allowed(cq.get("message", {}).get("chat", {}).get("id")):
+            return
+        action = cq.get("data")
+        if action == "start":
+            set_paused(False)
+            toast = "Überwachung gestartet - prüfe jetzt."
+        elif action == "stop":
+            set_paused(True)
+            toast = "Überwachung gestoppt."
+        elif action == "check":
+            request_check()
+            toast = "Prüfung läuft, Ergebnis kommt gleich."
+        else:
+            toast = ""
+        try:
+            tg_api("answerCallbackQuery", callback_query_id=cq["id"], text=toast)
+        except Exception as e:
+            log.debug(f"answerCallbackQuery: {e}")
+        # Menü-Nachricht aktualisieren (Start/Stopp-Knopf wechselt)
+        try:
+            tg_api("editMessageText", chat_id=TG_CHAT, message_id=cq["message"]["message_id"],
+                   text=menu_text(), reply_markup=menu_markup())
+        except Exception as e:
+            log.debug(f"editMessageText: {e}")  # z. B. 'message is not modified'
+
+
+def notify_result(status, meldung):
+    """Telegram-Meldung nach jeder Prüfung (bzw. nur bei Fehler/Nachbuchung)."""
+    jede = OPT.get("telegram_jede_pruefung", True)
+    if STATE.get("paused"):
+        weiter = "Überwachung ist gestoppt."
+    else:
+        weiter = f"Nächste Prüfung {local_hm(STATE.get('next_check'))}."
+    if status == "fehler":
+        telegram(f"…{SUFFIX}: ❌ Fehler: {meldung}\n{weiter}")
+    elif status.startswith("nachgebucht"):
+        telegram(f"…{SUFFIX}: 📲 {meldung}\n{weiter}")
+    elif status == "niedrig":
+        telegram(f"…{SUFFIX}: ⚠️ {meldung}\n{weiter}")
+    elif jede:
+        telegram(f"…{SUFFIX}: 📶 {meldung}\n{weiter}")
 
 
 # --------------------------------------------------------------------------- #
@@ -155,6 +306,7 @@ class HaMqtt:
         self._discovery()
         client.subscribe(f"{self.base}/check/set")
         client.subscribe(f"{self.base}/auto/set")
+        client.subscribe(f"{self.base}/monitor/set")
         client.publish(f"{self.base}/availability", "online", retain=True)
         self.publish_state()
 
@@ -162,11 +314,14 @@ class HaMqtt:
         payload = msg.payload.decode(errors="ignore").strip().upper()
         if msg.topic.endswith("/check/set"):
             log.info("Prüfung über Home Assistant angefordert.")
-            WAKE.set()
+            request_check()
         elif msg.topic.endswith("/auto/set") and payload in ("ON", "OFF"):
             STATE["auto_topup"] = payload == "ON"
             save_state()
             log.info(f"Automatisch nachbuchen: {'an' if STATE['auto_topup'] else 'aus'}")
+            self.publish_state()
+        elif msg.topic.endswith("/monitor/set") and payload in ("ON", "OFF"):
+            set_paused(payload == "OFF")
             self.publish_state()
 
     # -- Discovery ---------------------------------------------------------- #
@@ -232,6 +387,13 @@ class HaMqtt:
                 "command_topic": f"{self.base}/auto/set",
                 "icon": "mdi:autorenew",
             },
+            ("switch", "ueberwachung"): {
+                "name": "Überwachung",
+                "state_topic": st,
+                "value_template": "{{ 'OFF' if value_json.paused else 'ON' }}",
+                "command_topic": f"{self.base}/monitor/set",
+                "icon": "mdi:radar",
+            },
         }
         for (component, key), cfg in entities.items():
             cfg.update(avail)
@@ -261,6 +423,7 @@ class HaMqtt:
             "last_topup": STATE.get("last_topup"),
             "next_check": STATE.get("next_check"),
             "auto_topup": STATE.get("auto_topup", True),
+            "paused": STATE.get("paused", False),
         }
         self.client.publish(f"{self.base}/state", json.dumps(payload), retain=True)
 
@@ -559,9 +722,21 @@ def main():
 
     log.info(f"AT-Extender gestartet (Rufnummer …{SUFFIX}, Schwelle {SCHWELLE} GB).")
     HA.connect()
+    if TG_ON:
+        TelegramBot().start()
+    elif OPT.get("telegram_aktiv"):
+        log.warning("Telegram aktiv, aber Bot-Token oder Chat-ID fehlt.")
 
     while True:
         WAKE.clear()
+        if STATE.get("paused") and not MANUAL.is_set():
+            STATE["next_check"] = None
+            HA.publish_state(status="gestoppt", meldung="Überwachung gestoppt.")
+            log.info("Überwachung gestoppt - warte auf Start oder manuelle Prüfung.")
+            WAKE.wait()
+            continue
+        MANUAL.clear()
+
         status, meldung = "fehler", ""
         for attempt in range(1, 4):
             try:
@@ -572,18 +747,22 @@ def main():
                 log.error(f"Versuch {attempt}/3 fehlgeschlagen: {e}")
                 time.sleep(5)
 
-        if status == "fehler":
-            telegram(f"…{SUFFIX}: ❌ Fehler: {meldung}")
-        elif status.startswith("nachgebucht"):
-            telegram(f"…{SUFFIX}: 📲 {meldung}")
+        if STATE.get("paused"):
+            STATE["next_check"] = None
+            HA.publish_state(status=status, meldung=meldung)
+            notify_result(status, meldung)
+            log.info(f"Status: {status}. Überwachung gestoppt.")
+            WAKE.wait()  # Ergebnis stehen lassen, bis Start/Prüfen/Stopp kommt
+            continue
 
         interval = next_interval()
         next_ts = datetime.fromtimestamp(time.time() + interval, timezone.utc).isoformat(timespec="seconds")
         HA.publish_state(status=status, meldung=meldung, next_check=next_ts)
+        notify_result(status, meldung)
         log.info(f"Status: {status}. Nächste Prüfung in {interval} s.")
 
         if WAKE.wait(timeout=interval):
-            log.info("Vorzeitige Prüfung ausgelöst.")
+            log.info("Vorzeitig aufgeweckt (Prüfen/Start/Stopp).")
 
 
 if __name__ == "__main__":

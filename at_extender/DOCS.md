@@ -30,12 +30,13 @@ Home Assistant.
 | Entität | Bedeutung |
 |---|---|
 | `sensor.aldi_talk_datenvolumen` | Restvolumen in GB |
-| `sensor.aldi_talk_status` | `ok`, `niedrig`, `nachgebucht`, `nachgebucht_unbestaetigt`, `fehler` (Attribut `meldung` mit Details) |
+| `sensor.aldi_talk_status` | `ok`, `niedrig`, `nachgebucht`, `nachgebucht_unbestaetigt`, `fehler`, `gestoppt` (Attribut `meldung` mit Details) |
 | `sensor.aldi_talk_letzte_pruefung` | Zeitpunkt der letzten erfolgreichen Prüfung |
 | `sensor.aldi_talk_letzte_nachbuchung` | Zeitpunkt der letzten Nachbuchung |
 | `sensor.aldi_talk_naechste_pruefung` | Wann das Add-on das nächste Mal prüft |
 | `button.aldi_talk_jetzt_pruefen` | Sofort prüfen (statt auf das Intervall zu warten) |
 | `switch.aldi_talk_automatisch_nachbuchen` | Nachbuchen an/aus; ist es aus, wird nur gemeldet (`niedrig`) |
+| `switch.aldi_talk_ueberwachung` | Regelmäßige Prüfung an/aus (gleich wie Start/Stopp im Telegram-Menü). „Jetzt prüfen" geht auch, wenn sie aus ist. |
 
 ## Optionen
 
@@ -44,7 +45,20 @@ Home Assistant.
 | `schwelle_gb` | 1.0 | Unter diesem Wert wird nachgebucht. ALDI zeigt den Plus-Button meist erst unter 1 GB. |
 | `automatisch_nachbuchen` | an | Startwert für den Schalter |
 | `intervall_modus` | smart | `smart`: viel Volumen → selten prüfen (bis 90 min), knapp über der Schwelle → alle 1–1,5 min. `fest`: immer `intervall_fest`. `zufall`: zwischen `intervall_min` und `intervall_max`. |
-| `telegram_*` | aus | Zusätzlich Telegram-Meldung bei Nachbuchung und Fehlern |
+| `telegram_aktiv`, `telegram_bot_token`, `telegram_chat_id` | aus | Telegram-Meldungen und Menü (siehe unten) |
+| `telegram_jede_pruefung` | an | Nach jeder Prüfung das Restvolumen schicken. Aus = nur bei Fehler, wenig Volumen oder Nachbuchung. |
+
+## Telegram
+
+Mit `telegram_aktiv` schickt der Bot nach jeder Prüfung eine Nachricht, z. B.
+`…7366: 📶 Noch 11.90 GB übrig. Nächste Prüfung 12:17.`
+
+**Menü:** Schreib dem Bot eine beliebige Nachricht. Er antwortet mit dem aktuellen Stand und den Knöpfen
+**⏸ Überwachung stoppen** / **▶️ Überwachung starten** und **🔄 Jetzt prüfen**.
+Gestoppt bleibt gestoppt, auch nach einem Neustart des Add-ons. Der Bot reagiert nur auf den Chat aus `telegram_chat_id`.
+
+Der Bot darf nirgends sonst abgefragt werden (kein Webhook, nicht zusätzlich in der HA-Integration „Telegram bot"
+im Polling-Modus), sonst kommen die Menü-Eingaben nicht an (Log: „Bot wird woanders abgefragt").
 
 ## Beispiel-Automation (Push auf das Handy)
 

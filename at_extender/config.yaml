@@ -1,5 +1,5 @@
 name: AT-Extender
-version: "1.0.2"
+version: "1.1.0"
 slug: at_extender
 description: ALDI TALK Datenvolumen überwachen und bei Bedarf automatisch nachbuchen
 url: https://github.com/G-Chalupa/AT-Extender
@@ -25,6 +25,7 @@ options:
   telegram_aktiv: false
   telegram_bot_token: ""
   telegram_chat_id: ""
+  telegram_jede_pruefung: true
   log_level: info
 schema:
   rufnummer: str
@@ -38,4 +39,5 @@ schema:
   telegram_aktiv: bool
   telegram_bot_token: password?
   telegram_chat_id: str?
+  telegram_jede_pruefung: bool
   log_level: list(debug|info|warning|error)

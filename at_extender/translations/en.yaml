@@ -21,5 +21,8 @@ configuration:
     name: Telegram bot token
   telegram_chat_id:
     name: Telegram chat ID
+  telegram_jede_pruefung:
+    name: Telegram after every check
+    description: Send the remaining data after every check. Off = only on errors, low data or top-ups.
   log_level:
     name: Log level

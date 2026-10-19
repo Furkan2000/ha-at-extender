@@ -66,11 +66,15 @@ switch.aldi_talk_automatisch_nachbuchen. Broker credentials come from Supervisor
   (portal replaced `one-group` with `one-stack`).
 - 1.0.2: new meter parsing, tested locally against the user's real portal HTML (reads 16.5 GB,
   simulated 812 MB → clicks plus). **Confirmed working on HA** (2026-10-19: login OK, reads 11.90 GB).
+- 1.1.0: Telegram message after every check (option `telegram_jede_pruefung`), Telegram menu (any text →
+  inline buttons Start/Stopp/Jetzt prüfen, only from `telegram_chat_id`, long-polling thread `TelegramBot`,
+  offset in state.json `tg_offset`), pause state `STATE["paused"]` (persists), HA switch
+  `switch.aldi_talk_ueberwachung` (topic `monitor/set`), status `gestoppt`. Add-on bot is a different bot than
+  HA's own telegram_bot integration (polling) — don't share tokens or getUpdates will 409.
 
 ## Open points / next steps
 - First real top-up (< 1 GB) is untested: check status sensor + /share/at_extender dumps;
   adjust confirmation-dialog handling if needed.
-- Telegram optional (user was looking up chat ID via @userinfobot).
 - Unrelated noise in HA core log: flightradar24 HTTP 429, Bresser template missing `battery_ok`.
 
 ## Workflow tips
