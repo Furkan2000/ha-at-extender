@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.zip
+/share/
+options.json
+state.json
+cookies.json

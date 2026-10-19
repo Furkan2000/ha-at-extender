@@ -1,0 +1,30 @@
+configuration:
+  rufnummer:
+    name: Rufnummer
+    description: Deine ALDI-TALK-Rufnummer (Login für das Kundenportal).
+  passwort:
+    name: Passwort
+    description: Passwort für das ALDI-TALK-Kundenportal.
+  schwelle_gb:
+    name: Schwelle (GB)
+    description: Unter diesem Restvolumen wird nachgebucht. ALDI bietet das Nachbuchen meist erst unter 1 GB an.
+  automatisch_nachbuchen:
+    name: Automatisch nachbuchen
+    description: Startwert. Lässt sich später auch per Schalter in Home Assistant ändern.
+  intervall_modus:
+    name: Intervall-Modus
+    description: "smart = je weniger Volumen, desto häufiger prüfen; fest = immer gleiches Intervall; zufall = zufällig zwischen Min und Max."
+  intervall_fest:
+    name: Festes Intervall (Sekunden)
+  intervall_min:
+    name: Zufallsintervall Minimum (Sekunden)
+  intervall_max:
+    name: Zufallsintervall Maximum (Sekunden)
+  telegram_aktiv:
+    name: Telegram aktivieren
+  telegram_bot_token:
+    name: Telegram Bot-Token
+  telegram_chat_id:
+    name: Telegram Chat-ID
+  log_level:
+    name: Log-Level

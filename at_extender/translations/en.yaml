@@ -1,0 +1,25 @@
+configuration:
+  rufnummer:
+    name: Phone number
+  passwort:
+    name: Password
+  schwelle_gb:
+    name: Threshold (GB)
+  automatisch_nachbuchen:
+    name: Auto top-up
+  intervall_modus:
+    name: Interval mode
+  intervall_fest:
+    name: Fixed interval (seconds)
+  intervall_min:
+    name: Random interval minimum (seconds)
+  intervall_max:
+    name: Random interval maximum (seconds)
+  telegram_aktiv:
+    name: Enable Telegram
+  telegram_bot_token:
+    name: Telegram bot token
+  telegram_chat_id:
+    name: Telegram chat ID
+  log_level:
+    name: Log level
