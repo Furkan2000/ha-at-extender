@@ -81,8 +81,9 @@ switch.aldi_talk_automatisch_nachbuchen. Broker credentials come from Supervisor
   "+1-GB-Knopf ..." when volume drops under 2 GB and adjust plus_state() if it is misdetected.
 
 ## Open points / next steps
-- First real top-up (< 1 GB) is untested: check status sensor + /share/at_extender dumps;
-  adjust confirmation-dialog handling if needed.
+- First real top-up **confirmed 2026-10-20**: 0.00 GB → click → 1.00 GB, status `nachgebucht`,
+  no confirmation dialog appeared. Before that it sat at 1.01 GB for a long time without booking
+  (user says ALDI allows top-up slightly above 1 GB) → reason for 1.3.0 early top-up.
 - Unrelated noise in HA core log: flightradar24 HTTP 429, Bresser template missing `battery_ok`.
 
 ## Workflow tips
