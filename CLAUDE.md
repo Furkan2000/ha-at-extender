@@ -20,7 +20,8 @@ Note: ALDI TALK's terms (Leistungsbeschreibung 10.3 g) forbid automation; the us
 - Since 2026-10-19 the add-on is installed **from this GitHub repo** (added as add-on repository in HA),
   slug **`72298cf0_at_extender`**. The old local copy (`local_at_extender`, /addons/at_extender) is uninstalled.
 - Working clone for Claude Code: **/share/at_extender_src** (the Claude Code add-on cannot see /addons).
-  `gh` is logged in as Furkan2000 (token may be lost on Claude Code add-on restart → `gh auth login` again).
+  Push auth: repo-local credential helper reads a fine-grained token from /homeassistant/.claudecode/github_token
+  (persists across Claude Code add-on restarts; `gh auth login` does not).
 
 ## Files
 - `config.yaml` — add-on manifest (version **1.0.2**, arch amd64/aarch64, `services: mqtt:want`, `map: share:rw`).
