@@ -8,6 +8,9 @@ configuration:
   schwelle_gb:
     name: Schwelle (GB)
     description: Unter diesem Restvolumen wird nachgebucht. ALDI bietet das Nachbuchen meist erst unter 1 GB an.
+  nachbuchen_versuch_gb:
+    name: Früh-Nachbuchen unter (GB)
+    description: Zwischen Schwelle und diesem Wert wird nachgebucht, sobald ALDI den +1-GB-Knopf freigibt (nicht ausgegraut). Gleich Schwelle setzen zum Abschalten.
   automatisch_nachbuchen:
     name: Automatisch nachbuchen
     description: Startwert. Lässt sich später auch per Schalter in Home Assistant ändern.

@@ -43,6 +43,7 @@ Home Assistant.
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `schwelle_gb` | 1.0 | Unter diesem Wert wird nachgebucht. ALDI zeigt den Plus-Button meist erst unter 1 GB. |
+| `nachbuchen_versuch_gb` | 2.0 | Früh-Nachbuchen: Zwischen `schwelle_gb` und diesem Wert prüft das Add-on, ob der +1-GB-Knopf schon aktiv ist (nicht ausgegraut), und bucht dann nach. Bringt ein Versuch nichts, wird 15 min gewartet. Auf `schwelle_gb` setzen = aus. |
 | `automatisch_nachbuchen` | an | Startwert für den Schalter |
 | `intervall_modus` | smart | `smart`: viel Volumen → selten prüfen (bis 90 min), knapp über der Schwelle → alle 1–1,5 min. `fest`: immer `intervall_fest`. `zufall`: zwischen `intervall_min` und `intervall_max`. |
 | `telegram_aktiv`, `telegram_bot_token`, `telegram_chat_id` | aus | Telegram-Meldungen und Menü (siehe unten) |

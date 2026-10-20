@@ -5,6 +5,9 @@ configuration:
     name: Password
   schwelle_gb:
     name: Threshold (GB)
+  nachbuchen_versuch_gb:
+    name: Early top-up below (GB)
+    description: Between threshold and this value, top up as soon as ALDI enables the +1 GB button (not greyed out). Set equal to threshold to disable.
   automatisch_nachbuchen:
     name: Auto top-up
   intervall_modus:

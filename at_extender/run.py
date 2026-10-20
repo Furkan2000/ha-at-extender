@@ -46,6 +46,9 @@ logging.getLogger("paho").setLevel(logging.WARNING)
 RUFNUMMER = str(OPT["rufnummer"]).strip()
 PASSWORT = str(OPT["passwort"])
 SCHWELLE = float(OPT.get("schwelle_gb", 1.0))
+# Zwischen SCHWELLE und VERSUCH_GB wird nur nachgebucht, wenn der +1-GB-Knopf aktiv aussieht.
+VERSUCH_GB = max(SCHWELLE, float(OPT.get("nachbuchen_versuch_gb", 2.0)))
+FRUEH_PAUSE = 15 * 60  # nach einem Früh-Versuch ohne Wirkung so lange nicht erneut klicken
 SUFFIX = RUFNUMMER[-4:] if len(RUFNUMMER) >= 4 else RUFNUMMER  # für Namen, nie die volle Nummer
 
 # --------------------------------------------------------------------------- #
@@ -553,6 +556,30 @@ def do_login(page, context):
 
 
 PLUS_BTN = 'one-button[slot="action"]:has(one-icon[name="plus"])'
+GREY_RE = re.compile(r"rgb\(\s*212\s*,\s*212\s*,\s*212\s*\)")
+
+
+def plus_state(btn):
+    """Liest den +1-GB-Knopf aus. Ausgegraut (Stand Okt. 2026): style 'rgb(212, 212, 212)',
+    Attribut 'inverse', Icon/Text color="muted". Gibt (aktiv, Beschreibung) zurück."""
+    info = btn.evaluate("""el => ({
+        style: el.getAttribute('style') || '',
+        inverse: el.hasAttribute('inverse'),
+        disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
+        muted: !!el.querySelector('[color="muted"]'),
+        inner: !!(el.shadowRoot && el.shadowRoot.querySelector('button[disabled], [aria-disabled="true"]')),
+    })""")
+    grau = []
+    if GREY_RE.search(info["style"]):
+        grau.append("grauer Hintergrund")
+    if info["inverse"]:
+        grau.append("inverse")
+    if info["muted"]:
+        grau.append("muted")
+    if info["disabled"] or info["inner"]:
+        grau.append("disabled")
+    desc = ", ".join(grau) if grau else f"aktiv (style={info['style']!r})"
+    return not grau, desc
 VOL_RE = re.compile(r"([\d\.,]+)\s*(GB|MB)", re.I)
 
 
@@ -637,16 +664,33 @@ def check_once():
             STATE["last_check"] = now_iso()
             log.info(f"Aktuelles Datenvolumen: {gb:.2f} GB")
 
-            if gb >= SCHWELLE:
+            if gb >= VERSUCH_GB:
                 return "ok", f"Noch {gb:.2f} GB übrig."
 
+            frueh = gb >= SCHWELLE  # über der Schwelle: nur, wenn ALDI das Nachbuchen schon anbietet
             if not STATE.get("auto_topup", True):
+                if frueh:
+                    return "ok", f"Noch {gb:.2f} GB übrig."
                 msg = f"Nur noch {gb:.2f} GB - automatisches Nachbuchen ist aus."
                 log.info(msg)
                 return "niedrig", msg
 
-            log.info("Versuche, 1 GB nachzubuchen...")
             btn = meter.locator(PLUS_BTN).first
+            if frueh:
+                if not btn.count():
+                    return "ok", f"Noch {gb:.2f} GB übrig."
+                aktiv, desc = plus_state(btn)
+                log.info(f"{gb:.2f} GB (< {VERSUCH_GB:g} GB): +1-GB-Knopf {desc}.")
+                if not aktiv:
+                    return "ok", f"Noch {gb:.2f} GB übrig (Nachbuchen noch nicht freigegeben)."
+                seit = time.time() - STATE.get("frueh_klick_ts", 0)
+                if seit < FRUEH_PAUSE:
+                    return "ok", (f"Noch {gb:.2f} GB übrig (letzter Früh-Versuch vor "
+                                  f"{int(seit // 60)} min ohne Wirkung, warte).")
+                save_debug(page, "frueh-nachbuchen")  # einmal festhalten, wie der aktive Knopf aussieht
+                STATE["frueh_klick_ts"] = time.time()
+
+            log.info("Versuche, 1 GB nachzubuchen...")
             if not (btn.count() and btn.is_visible()):
                 save_debug(page, "nachbuchen")
                 raise Exception("Nachbuch-Button nicht gefunden.")
@@ -663,6 +707,7 @@ def check_once():
                         break
                 except Exception:
                     pass
+            vorher_topup = STATE.get("last_topup")
             STATE["last_topup"] = now_iso()
 
             # Gegenprüfung: Seite neu laden und Volumen erneut lesen
@@ -672,10 +717,17 @@ def check_once():
                 gb_neu, _ = get_datenvolumen(page)
                 STATE["last_gb"] = gb_neu
                 if gb_neu > gb + 0.5:
+                    STATE.pop("frueh_klick_ts", None)
                     return "nachgebucht", f"1 GB nachgebucht: {gb:.2f} → {gb_neu:.2f} GB."
+                if frueh:
+                    STATE["last_topup"] = vorher_topup
+                    return "ok", (f"Früh-Nachbuchen bei {gb:.2f} GB ohne Wirkung (jetzt {gb_neu:.2f} GB). "
+                                  f"Nächster Versuch frühestens in {FRUEH_PAUSE // 60} min.")
                 return "nachgebucht_unbestaetigt", (
                     f"Button geklickt, Volumen danach {gb_neu:.2f} GB (evtl. noch nicht aktualisiert).")
             except Exception:
+                if frueh:
+                    return "ok", f"Früh-Nachbuchen bei {gb:.2f} GB geklickt, Gegenprüfung fehlgeschlagen."
                 return "nachgebucht_unbestaetigt", f"Button bei {gb:.2f} GB geklickt, Gegenprüfung fehlgeschlagen."
         finally:
             browser.close()
@@ -710,7 +762,8 @@ def main():
         while True:
             time.sleep(3600)
 
-    log.info(f"AT-Extender gestartet (Rufnummer …{SUFFIX}, Schwelle {SCHWELLE} GB).")
+    log.info(f"AT-Extender gestartet (Rufnummer …{SUFFIX}, Schwelle {SCHWELLE} GB, "
+             f"Früh-Nachbuchen unter {VERSUCH_GB:g} GB).")
     HA.connect()
     if TG_ON:
         TelegramBot().start()

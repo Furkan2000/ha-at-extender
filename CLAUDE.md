@@ -73,6 +73,12 @@ switch.aldi_talk_automatisch_nachbuchen. Broker credentials come from Supervisor
   HA's own telegram_bot integration (polling) — don't share tokens or getUpdates will 409.
 - 1.2.0: inline menu replaced by a persistent reply keyboard (`keyboard()`, `is_persistent`), attached to
   every bot message; buttons arrive as plain text (BTN_START/BTN_STOP/BTN_CHECK/BTN_STATUS). No callback_query anymore.
+- 1.3.0: early top-up. Between schwelle_gb and `nachbuchen_versuch_gb` (default 2.0) `plus_state()` reads the
+  +1 GB button; greyed = style rgb(212,212,212) / `inverse` attr / child color="muted" / disabled (seen Oct 2026 at
+  14.9 GB). Active → save_debug("frueh-nachbuchen") + click; no effect → status ok, 15 min cooldown
+  (`STATE["frueh_klick_ts"]`), last_topup restored. Below schwelle: clicks regardless (old behavior).
+  **Unverified:** what the ENABLED button looks like — check the first frueh-nachbuchen dump / log line
+  "+1-GB-Knopf ..." when volume drops under 2 GB and adjust plus_state() if it is misdetected.
 
 ## Open points / next steps
 - First real top-up (< 1 GB) is untested: check status sensor + /share/at_extender dumps;

@@ -1,5 +1,5 @@
 name: AT-Extender
-version: "1.2.0"
+version: "1.3.0"
 slug: at_extender
 description: ALDI TALK Datenvolumen überwachen und bei Bedarf automatisch nachbuchen
 url: https://github.com/G-Chalupa/AT-Extender
@@ -17,6 +17,7 @@ options:
   rufnummer: ""
   passwort: ""
   schwelle_gb: 1.0
+  nachbuchen_versuch_gb: 2.0
   automatisch_nachbuchen: true
   intervall_modus: smart
   intervall_fest: 300
@@ -31,6 +32,7 @@ schema:
   rufnummer: str
   passwort: password
   schwelle_gb: float(0.1,10)
+  nachbuchen_versuch_gb: float(0.1,20)
   automatisch_nachbuchen: bool
   intervall_modus: list(smart|fest|zufall)
   intervall_fest: int(60,86400)
