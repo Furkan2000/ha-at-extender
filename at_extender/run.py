@@ -694,6 +694,16 @@ def check_once():
             if not (btn.count() and btn.is_visible()):
                 save_debug(page, "nachbuchen")
                 raise Exception("Nachbuch-Button nicht gefunden.")
+            if not frueh:
+                # Nur zur Diagnose: wie sieht der Knopf aus, wenn ALDI das Nachbuchen anbietet?
+                try:
+                    aktiv, desc = plus_state(btn)
+                    log.info(f"+1-GB-Knopf vor dem Klick: {desc}.")
+                    if not STATE.get("knopf_dump"):
+                        save_debug(page, "knopf-vor-klick")
+                        STATE["knopf_dump"] = True
+                except Exception as e:
+                    log.debug(f"Knopf-Diagnose: {e}")
             btn.scroll_into_view_if_needed()
             btn.click()
             time.sleep(2)
