@@ -97,6 +97,19 @@ def local_hm(iso):
         return "-"
 
 
+def naechste_pruefung():
+    """'in 3 min 16 s (um 12:39)' bzw. '-' ohne geplante Prüfung."""
+    iso = STATE.get("next_check")
+    try:
+        rest = int(round((datetime.fromisoformat(iso) - datetime.now(timezone.utc)).total_seconds()))
+    except Exception:
+        return "-"
+    rest = max(rest, 0)
+    m, sek = divmod(rest, 60)
+    dauer = f"{m} min {sek} s" if m else f"{sek} s"
+    return f"in {dauer} (um {local_hm(iso)})"
+
+
 def request_check():
     MANUAL.set()
     WAKE.set()
@@ -165,7 +178,7 @@ def menu_text():
         naechste = "-"
     else:
         lauf = "▶️ läuft"
-        naechste = local_hm(STATE.get("next_check"))
+        naechste = naechste_pruefung()
     vol = f"{gb:.2f} GB (Stand {local_hm(STATE.get('last_check'))})" if gb is not None else "noch unbekannt"
     return (f"ALDI TALK …{SUFFIX}\n"
             f"Überwachung: {lauf}\n"
@@ -238,7 +251,7 @@ def notify_result(status, meldung):
     if STATE.get("paused"):
         weiter = "Überwachung ist gestoppt."
     else:
-        weiter = f"Nächste Prüfung {local_hm(STATE.get('next_check'))}."
+        weiter = f"Nächste Prüfung {naechste_pruefung()}."
     if status == "fehler":
         telegram(f"…{SUFFIX}: ❌ Fehler: {meldung}\n{weiter}")
     elif status.startswith("nachgebucht"):
