@@ -272,18 +272,27 @@ class HaMqtt:
         self.uid = f"at_extender_{SUFFIX}"
 
     def connect(self):
+        # Beim Booten laufen Supervisor/Mosquitto evtl. noch nicht -> im Hintergrund
+        # so lange versuchen, bis es klappt, statt einmalig aufzugeben.
+        threading.Thread(target=self._connect_loop, daemon=True).start()
+
+    def _connect_loop(self):
         token = os.environ.get("SUPERVISOR_TOKEN")
         if not token:
             log.warning("Kein SUPERVISOR_TOKEN - MQTT deaktiviert.")
             return
-        try:
-            r = requests.get("http://supervisor/services/mqtt",
-                             headers={"Authorization": f"Bearer {token}"}, timeout=10)
-            r.raise_for_status()
-            cfg = r.json()["data"]
-        except Exception as e:
-            log.warning(f"Kein MQTT-Broker gefunden ({e}). Läuft ohne HA-Entitäten weiter.")
-            return
+        delay = 10
+        while True:
+            try:
+                r = requests.get("http://supervisor/services/mqtt",
+                                 headers={"Authorization": f"Bearer {token}"}, timeout=10)
+                r.raise_for_status()
+                cfg = r.json()["data"]
+                break
+            except Exception as e:
+                log.warning(f"Kein MQTT-Broker gefunden ({e}). Neuer Versuch in {delay} s.")
+                time.sleep(delay)
+                delay = min(delay * 2, 300)
 
         import paho.mqtt.client as mqtt
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.uid)
@@ -295,13 +304,11 @@ class HaMqtt:
         c.on_connect = self._on_connect
         c.on_message = self._on_message
         c.reconnect_delay_set(min_delay=5, max_delay=120)
-        try:
-            c.connect(cfg["host"], int(cfg.get("port", 1883)), keepalive=60)
-        except Exception as e:
-            log.warning(f"MQTT-Verbindung fehlgeschlagen: {e}")
-            return
-        c.loop_start()
+        # connect_async: der Netzwerk-Thread verbindet und wiederholt selbst,
+        # auch wenn der Broker beim ersten Versuch noch nicht erreichbar ist.
+        c.connect_async(cfg["host"], int(cfg.get("port", 1883)), keepalive=60)
         self.client = c
+        c.loop_start()
 
     # -- Callbacks ---------------------------------------------------------- #
     def _on_connect(self, client, userdata, flags, reason_code, properties):
@@ -313,12 +320,19 @@ class HaMqtt:
         client.subscribe(f"{self.base}/check/set")
         client.subscribe(f"{self.base}/auto/set")
         client.subscribe(f"{self.base}/monitor/set")
+        client.subscribe("homeassistant/status")
         client.publish(f"{self.base}/availability", "online", retain=True)
         self.publish_state()
 
     def _on_message(self, client, userdata, msg):
         payload = msg.payload.decode(errors="ignore").strip().upper()
-        if msg.topic.endswith("/check/set"):
+        if msg.topic == "homeassistant/status":
+            if payload == "ONLINE":
+                # HA neu gestartet -> Discovery und Zustand erneut senden
+                self._discovery()
+                client.publish(f"{self.base}/availability", "online", retain=True)
+                self.publish_state()
+        elif msg.topic.endswith("/check/set"):
             log.info("Prüfung über Home Assistant angefordert.")
             request_check()
         elif msg.topic.endswith("/auto/set") and payload in ("ON", "OFF"):
